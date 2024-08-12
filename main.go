@@ -1,21 +1,60 @@
 package main
 
 import (
-	"errors"
+	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
-	"github.com/TomascpMarques/maestro/telemetry"
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Struct validation across the entire app
+var VALIDATE *validator.Validate = validator.New(
+	validator.WithRequiredStructEnabled(),
+	validator.WithPrivateFieldValidation(),
+)
+
+/*
+	TODO: Create Database according to env
+	TODO: Backup Database and zip it according to env
+*/
+
 func main() {
-	var db *sqlx.DB = sqlx.MustOpen("sqlite3", "local_test")
-	err := db.Ping()
+	configPath, defined := os.LookupEnv("ENV_PATH")
+	if !defined {
+		log.Fatalf("No Environment file specified")
+	}
+	config, err := LoadConfig(configPath)
 	if err != nil {
-		log.Fatalf("Error getting the database")
+		log.Fatalf("Config Error:\n%s\n", err.Error())
+	}
+	configJson, err := json.Marshal(config)
+	if err != nil {
+		panic("Should not fail to parse config to json!")
+	}
+
+	telemetryFilePath, telemetryFile, err := CreateTelemetryWriter(config.TelemetryConfig.Destination)
+	if err != nil {
+		log.Println(err)
+		panic("Should not fail to create a writer for the telemetry file!")
+	}
+	defer telemetryFile.Close()
+
+	logger := InitializeTelemetry(telemetryFile)
+
+	logger.Info("telemetry", "location", telemetryFilePath)
+	logger.Info("environment", "config", configJson)
+
+	var db *sqlx.DB = sqlx.MustOpen("sqlite3", "local_test")
+	err = db.Ping()
+	if err != nil {
+		logger.Error("database", "reason", "error getting a connection to the database")
 	}
 
 	schema := `CREATE TABLE spo (
@@ -29,18 +68,20 @@ func main() {
 		log.Fatalf("Could not build")
 	}
 
-	_, someErr := telemetry.InitTelemetry()
-	if errors.Is(someErr, telemetry.ErrFailedToRegister) {
-		log.Println("OK")
-	}
-
 	app := gin.Default()
 
 	api := app.Group("/api")
-
 	HttpApi(api)
 
-	app.Run() // listen and serve on 0.0.0.0:8080
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      app,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
+
+	server.ListenAndServe()
 }
 
 func HttpApi(api *gin.RouterGroup) {
