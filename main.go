@@ -8,9 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
-	"github.com/jmoiron/sqlx"
+	gin "github.com/gin-gonic/gin"
+	validator "github.com/go-playground/validator/v10"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -21,7 +20,7 @@ var VALIDATE *validator.Validate = validator.New(
 )
 
 /*
-	TODO: Create Database according to env
+	// TODO: Create Database according to env
 	TODO: Backup Database and zip it according to env
 */
 
@@ -39,7 +38,7 @@ func main() {
 		panic("Should not fail to parse config to json!")
 	}
 
-	telemetryFilePath, telemetryFile, err := CreateTelemetryWriter(config.TelemetryConfig.Destination)
+	telemetryFilePath, telemetryFile, err := TelemetryWriterFromFilePath(config.TelemetryConfig.Destination)
 	if err != nil {
 		log.Println(err)
 		panic("Should not fail to create a writer for the telemetry file!")
@@ -47,25 +46,30 @@ func main() {
 	defer telemetryFile.Close()
 
 	logger := InitializeTelemetry(telemetryFile)
+	slog.Info("setup", "status", "initialized telemetry successful")
 
-	logger.Info("telemetry", "location", telemetryFilePath)
-	logger.Info("environment", "config", configJson)
+	slog.Info("setup-telemetry", "location", telemetryFilePath)
+	slog.Info("setup-environment", "config", configJson)
 
-	var db *sqlx.DB = sqlx.MustOpen("sqlite3", "local_test")
-	err = db.Ping()
+	db, err, usable := ConnectToDatabase(config.DatabaseConfig.Uri)
 	if err != nil {
-		logger.Error("database", "reason", "error getting a connection to the database")
+		slog.Warn("database-creation", "cause", "db file error", "reason", err)
+	}
+	if !usable {
+		slog.Error("database-creation", "cause", "failure to use db")
+		slog.Info("setup", "operation", "terminating")
+		os.Exit(1)
 	}
 
 	schema := `CREATE TABLE spo (
-    value integer,
-    time text
-    );`
+	    value integer,
+	    time text
+	    );`
 
 	// execute a query on the server
 	_, err = db.Exec(schema)
 	if err != nil {
-		log.Fatalf("Could not build")
+		slog.Error("setup-db", "cause", "Could not build")
 	}
 
 	app := gin.Default()
