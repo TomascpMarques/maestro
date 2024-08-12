@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pelletier/go-toml/v2"
@@ -15,9 +16,10 @@ type BaseConfig struct {
 }
 
 type Database struct {
-	Uri            string `toml:"uri" validate:"required"`
-	Backup         bool   `toml:"backup"`
-	BackUpLocation string `toml:"location" validate:"required"`
+	Uri            string        `toml:"uri" validate:"required"`
+	Backup         bool          `toml:"backup"`
+	BackupInterval time.Duration `toml:"interval" validate:"required"`
+	BackUpLocation string        `toml:"location" validate:"required"`
 }
 
 type WebApi struct {
