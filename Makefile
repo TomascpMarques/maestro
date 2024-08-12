@@ -1,5 +1,6 @@
 build:
 	rm -rf ./.out/*
+	rm -rf ./rng
 	go build -o ./.out/app
 
 buildr:
@@ -7,11 +8,11 @@ buildr:
 
 run: build
 	chmod +xw ./.out/app
-	./out/app
+	./.out/app
 
 run_env: build
 	chmod +xw ./.out/app
 	ENV_PATH=.example.env ./.out/app
 
-test:
-	go test */***
+testA:
+	go test -v ./...
