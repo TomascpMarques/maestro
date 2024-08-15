@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"testing"
 
@@ -48,7 +49,16 @@ func TestBackUpFile(t *testing.T) {
 	handleErr(err)
 	for _, dir := range destDir {
 		if !dir.IsDir() {
-			assert.Equal(t, dir.Name(), "source_sql-bkup")
+			fileName := dir.Name()
+			if strings.Contains(fileName, ".zip") {
+				assert.Equal(t, "source_sql-bkup.zip", fileName)
+				continue
+			}
+			if !strings.Contains(fileName, ".zip") {
+				assert.Equal(t, "source_sql-bkup", fileName)
+				continue
+			}
+			assert.Failf(t, "Failed to generate backup files > have:%s", fileName)
 		}
 	}
 

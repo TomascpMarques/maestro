@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"archive/zip"
 	"bufio"
 	"errors"
 	"fmt"
@@ -9,14 +10,70 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/TomascpMarques/maestro/errs"
 )
+
+type CompressionErrorVariant uint
+
+const (
+	FailedCreatingRootZipFile CompressionErrorVariant = iota
+	FailedCreatingBackupZipFile
+	FailedCopyingFilesIntoArchive
+)
+
+func (m CompressionErrorVariant) Error() string {
+	switch m {
+	case FailedCopyingFilesIntoArchive:
+		return "failed copying files into archive"
+	case FailedCreatingBackupZipFile:
+		return "failed creating backup zip file"
+	case FailedCreatingRootZipFile:
+		return "failed creating root zip file"
+	}
+	return "Unknown Error"
+}
+
+type CompressionError struct {
+	errs.CustomError
+}
+
+func NewCompressionError(variant CompressionErrorVariant, cause, message string) *CompressionError {
+	return &CompressionError{
+		errs.NewCustomError(variant, cause, message),
+	}
+}
+
+func compressFile(file *os.File) *CompressionError {
+	// https://pkg.go.dev/github.com/kdungs/zip
+	zipDestFile, err := os.Create(fmt.Sprintf("%s.zip", file.Name()))
+	if err != nil {
+		slog.Error("backup-file-compress", "file-creation-fail", "failed to create the destination zip file")
+		return NewCompressionError(FailedCreatingRootZipFile, "zip creation failure", "failed to create the destination zip file")
+	}
+	defer zipDestFile.Close()
+
+	zipWriter := zip.NewWriter(zipDestFile)
+	defer zipWriter.Close()
+
+	zipW, err := zipWriter.Create(fmt.Sprintf("%s.backup", filepath.Base(file.Name())))
+	if err != nil {
+		slog.Error("backup-file-compress", "zip-creation-fail", "failed to create a zip file for the backup")
+		return NewCompressionError(FailedCreatingBackupZipFile, "zip backup failure", "failed to create backup zip file")
+	}
+
+	if _, err = io.Copy(zipW, file); err != nil {
+		slog.Error("backup-file-compress", "zip-write-fail", "failed to write to the zip file")
+		return NewCompressionError(FailedCopyingFilesIntoArchive, "copying into zip", "failed copy backup zip into archive")
+	}
+
+	return nil
+}
 
 type BackupLocations struct {
 	SourceLocation string
 	BackupLocation string
 }
-
-type FileBackupError uint
 
 func backupFile(locations BackupLocations) (err error) {
 	fileName := filepath.Base(locations.SourceLocation)
@@ -27,6 +84,8 @@ func backupFile(locations BackupLocations) (err error) {
 			filepath.Base(locations.SourceLocation),
 		),
 	)
+	destinationBkpFileName := filepath.Base(destinationFilename)
+
 	slog.Info("backup-file", "init-backup", fmt.Sprintf("starting backing up file [%s] into [%s]", fileName, destinationFilename))
 
 	err = os.MkdirAll(locations.BackupLocation, 0740)
@@ -42,12 +101,12 @@ func backupFile(locations BackupLocations) (err error) {
 	}
 	defer original.Close()
 
-	destination, err := os.Create(destinationFilename)
+	destinationBkpFile, err := os.Create(destinationFilename)
 	if err != nil {
 		slog.Error("backup-file", "write-backup-operation", "failed to create the destination file for the backup")
 		return
 	}
-	defer destination.Close()
+	defer destinationBkpFile.Close()
 
 	const BUFFER_SIZE = 5324288 // 5 Mebibyte
 	READ_BUFFER := make([]byte, BUFFER_SIZE)
@@ -67,7 +126,7 @@ func backupFile(locations BackupLocations) (err error) {
 			break
 		}
 
-		_, err = destination.Write(READ_BUFFER)
+		_, err = destinationBkpFile.Write(READ_BUFFER)
 		if err != nil {
 			slog.Error("backup-file", "write-backup-operation", "failed to write the buffer contents into the file")
 			return
@@ -75,6 +134,23 @@ func backupFile(locations BackupLocations) (err error) {
 	}
 
 	slog.Info("backup-file", "finished-backup", fmt.Sprintf("done backing up file [%s], success", fileName))
+
+	if compressionError := compressFile(destinationBkpFile); compressionError != nil {
+		if errors.Is(compressionError, FailedCreatingRootZipFile) {
+			slog.Warn(
+				"backup-file-compress", "compress-fail",
+				fmt.Sprintf("compressing file [%s], failed, but backup exists", destinationBkpFileName),
+			)
+			return
+		}
+	}
+
+	slog.Info("backup-file", "finished-backup-compression", "Successfully compressed the backup file")
+
+	if os.Remove(destinationBkpFileName) != nil {
+		slog.Warn("backup-file", "failed-deleting-temp-file", "")
+	}
+
 	return
 }
 
@@ -110,7 +186,7 @@ const (
 // ----------------------------------------------------
 
 func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleSignal, backupInterval time.Duration) /* Returns */ (
-	signal chan<- BackupTaskSignal,
+	signalTheHandler chan<- BackupTaskSignal,
 	ticker *time.Ticker,
 ) {
 	ticker = time.NewTicker(backupInterval)
@@ -122,7 +198,7 @@ func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleS
 			case taskSignal := <-taskHandle:
 				switch taskSignal {
 				case EndBackupTask:
-					signal <- BackupTaskSignal{
+					signalTheHandler <- BackupTaskSignal{
 						Done:   true,
 						Status: BackupEnded,
 						Error:  nil,
@@ -135,7 +211,7 @@ func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleS
 					)
 					return
 				case PauseBackupTask:
-					signal <- BackupTaskSignal{
+					signalTheHandler <- BackupTaskSignal{
 						Done:   false,
 						Status: BackupPaused,
 						Error:  nil,
@@ -148,7 +224,7 @@ func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleS
 					)
 					continue
 				case SkipBackupTask:
-					signal <- BackupTaskSignal{
+					signalTheHandler <- BackupTaskSignal{
 						Done:   false,
 						Status: BackupSkipped,
 						Error:  nil,
@@ -182,15 +258,15 @@ func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleS
 
 				err := backupFile(backups)
 				if err != nil {
-					signal <- BackupTaskSignal{
+					signalTheHandler <- BackupTaskSignal{
 						Done:   false,
-						Status: BackupSuccess,
-						Error:  nil,
+						Status: BackupFailed,
+						Error:  err,
 					}
 					continue
 				}
 				// After backup is done and successful, warn any observer
-				signal <- BackupTaskSignal{
+				signalTheHandler <- BackupTaskSignal{
 					Done:   false,
 					Status: BackupSuccess,
 					Error:  nil,
