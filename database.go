@@ -12,6 +12,13 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+/*
+ConnectToDatabase connects to a sqlite3 db file, if the file does not exist,
+create that file at the specified path, if that FS operation fails,
+the function error out, if the file creation succeeds but the opening of said
+sqlite3 file fails, the database will continue in "memory" mode,
+and will indicate that the DB instance will still be usable.
+*/
 func ConnectToDatabase(dbFilePath string) (db *sqlx.DB, err error, usable bool) {
 	usable = true
 	dbFilePath = filepath.Clean(dbFilePath)

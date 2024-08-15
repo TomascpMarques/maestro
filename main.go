@@ -23,10 +23,11 @@ var VALIDATE *validator.Validate = validator.New(
 
 /*
 	// TODO: Create Database according to env
-	TODO: Backup Database and zip it according to env
+	// TODO: Backup Database and zip it according to env
 */
 
 func main() {
+	// Env file config loading
 	configPath, defined := os.LookupEnv("ENV_PATH")
 	if !defined {
 		log.Fatalf("No Environment file specified")
@@ -35,11 +36,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Config Error:\n%s\n", err.Error())
 	}
+	// Will be used to later store the config values used to start this app instance
 	configJson, err := json.Marshal(config)
 	if err != nil {
 		panic("Should not fail to parse config to json!")
 	}
 
+	// Prepare the basic telemetry/logging for the app
 	telemetryFilePath, telemetryFile, err := TelemetryWriterFromFilePath(config.TelemetryConfig.Destination)
 	if err != nil {
 		log.Println(err)
@@ -53,6 +56,7 @@ func main() {
 	slog.Info("setup-telemetry", "location", telemetryFilePath)
 	slog.Info("setup-environment", "config", configJson)
 
+	// Database usage and connection
 	db, err, usable := ConnectToDatabase(config.DatabaseConfig.Uri)
 	if err != nil {
 		slog.Warn("database-creation", "cause", "db file error", "reason", err)
@@ -63,6 +67,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Database file backup worker handeling
 	taskHandle := make(<-chan backup.TaskHandleSignal, 20)
 	signalHandler, ticker := backup.CreateFileBackupTask(
 		backup.BackupLocations{
@@ -87,6 +92,7 @@ func main() {
 		slog.Error("setup-db", "cause", "Could not build")
 	}
 
+	// Web App config and launch
 	app := gin.Default()
 	api := app.Group("/api")
 	HttpApi(api)

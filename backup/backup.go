@@ -44,6 +44,12 @@ func NewCompressionError(variant CompressionErrorVariant, cause, message string)
 	}
 }
 
+/*
+compressFile given a pointer to an os.File, it will attempt to create a zip archive
+on the same directory of that file. If the zip file creation fails, the temp file
+created pre zip archive creation, will not be deleted and will be left in place.
+Only on successful zip archive, will the temp file be deleted.
+*/
 func compressFile(file *os.File) *CompressionError {
 	// https://pkg.go.dev/github.com/kdungs/zip
 	zipDestFile, err := os.Create(fmt.Sprintf("%s.zip", file.Name()))
@@ -183,8 +189,14 @@ const (
 	SkipBackupTask
 )
 
-// ----------------------------------------------------
-
+/*
+CreateFileBackupTask will create a worker that will backup and archive said backup,
+repeating that process within a given interval.
+This function also returns the ticker that will be used to start the archive action,
+and a channel that will inform the task caller of the current state of the worker on any change.
+A channel will also be provided to the function, to enable finer control of the backup activity,
+not of archiving activity.
+*/
 func CreateFileBackupTask(backups BackupLocations, taskHandle <-chan TaskHandleSignal, backupInterval time.Duration) /* Returns */ (
 	signalTheHandler chan<- BackupTaskSignal,
 	ticker *time.Ticker,

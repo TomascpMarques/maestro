@@ -10,7 +10,8 @@ import (
 	toml "github.com/pelletier/go-toml"
 )
 
-type BaseConfig struct {
+// Wraps all the wanted configs in on place
+type ConfigWrapper struct {
 	DatabaseConfig  Database  `toml:"database" validate:"required"`
 	WebApiConfig    WebApi    `toml:"web_api" validate:"required"`
 	TelemetryConfig Telemetry `toml:"telemetry" validate:"required"`
@@ -33,18 +34,22 @@ type Telemetry struct {
 	Destination string `toml:"destination" validate:"required"`
 }
 
-func LoadConfig(absOrigin string) (BaseConfig, error) {
-	var config BaseConfig
+/*
+LoadConfig loads the config values from an env file, with the files
+written using the TOML format.
+*/
+func LoadConfig(absOrigin string) (ConfigWrapper, error) {
+	var config ConfigWrapper
 
 	configFile, err := os.Open(absOrigin)
 	if err != nil {
-		return BaseConfig{},
+		return ConfigWrapper{},
 			errors.New("that file either does not exist, or the path is wrong")
 	}
 
 	err = toml.NewDecoder(configFile).Decode(&config)
 	if err != nil {
-		return BaseConfig{},
+		return ConfigWrapper{},
 			errors.New("failed to read config toml from: " + absOrigin)
 	}
 
@@ -68,6 +73,11 @@ func LoadConfig(absOrigin string) (BaseConfig, error) {
 	return config, nil
 }
 
+/*
+WebApiEnvErrorMapper Maps a validator error field into the expected
+error value, is used to customize the error messages given an invalid
+config field value.
+*/
 func WebApiEnvErrorMapper(err validator.FieldError, e *error) {
 	switch err.Field() {
 	case "Port":

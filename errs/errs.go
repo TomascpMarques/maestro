@@ -1,3 +1,8 @@
+/*
+Given any type that implements the ErrorCustom interface, and ErrorCustomVariant
+CustomError will automatically implement the necessary interfaces to simplify
+the error handling process, while keeping enough information
+*/
 package errs
 
 import (
@@ -13,7 +18,7 @@ type ErrorCustomVariant interface {
 type ErrorCustom interface {
 	GetVariant() ErrorCustomVariant
 
-	// --- Go classical error compatibility
+	// --- Go classical errors compatibility
 	Error() string
 	Is(target error) bool
 	// ---
