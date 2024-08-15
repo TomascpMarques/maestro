@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/pelletier/go-toml/v2"
+	// Got to use V1, V2 will break trying to read time.Duration values
+	toml "github.com/pelletier/go-toml"
 )
 
 type BaseConfig struct {
@@ -18,7 +19,7 @@ type BaseConfig struct {
 type Database struct {
 	Uri            string        `toml:"uri" validate:"required"`
 	Backup         bool          `toml:"backup"`
-	BackupInterval time.Duration `toml:"interval" validate:"required"`
+	BackupInterval time.Duration `toml:"backup_interval" validate:"required"`
 	BackUpLocation string        `toml:"location" validate:"required"`
 }
 
