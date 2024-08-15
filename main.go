@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/TomascpMarques/maestro/backup"
 	gin "github.com/gin-gonic/gin"
 	validator "github.com/go-playground/validator/v10"
 	_ "github.com/mattn/go-sqlite3"
@@ -61,6 +63,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	taskHandle := make(<-chan backup.TaskHandleSignal, 20)
+	signalHandler, ticker := backup.CreateFileBackupTask(
+		backup.BackupLocations{
+			SourceLocation: config.DatabaseConfig.Uri,
+			BackupLocation: config.DatabaseConfig.BackUpLocation,
+		},
+		taskHandle,
+		config.DatabaseConfig.BackupInterval,
+	)
+	// TODO Handle task signaler
+	_ = signalHandler
+	defer ticker.Stop()
+
 	schema := `CREATE TABLE spo (
 	    value integer,
 	    time text
@@ -73,16 +88,15 @@ func main() {
 	}
 
 	app := gin.Default()
-
 	api := app.Group("/api")
 	HttpApi(api)
 
 	server := &http.Server{
-		Addr:         ":8080",
 		Handler:      app,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:         fmt.Sprintf(":%d", config.WebApiConfig.Port),
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		ReadTimeout:  time.Duration(config.WebApiConfig.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(config.WebApiConfig.WriteTimeout) * time.Second,
 	}
 
 	server.ListenAndServe()
