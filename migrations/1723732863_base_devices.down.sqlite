@@ -1,0 +1,9 @@
+BEGIN;
+
+DROP TABLE IF EXISTS device_measurement;
+
+DROP TABLE IF EXISTS device;
+
+COMMIT;
+
+VACUUM;

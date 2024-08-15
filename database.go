@@ -1,15 +1,17 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/jmoiron/sqlx"
 
-	// "github.com/golang-migrate/migrate/v4"
-	// "github.com/mattn/go-sqlite3"
+	"github.com/golang-migrate/migrate/v4"
+	migration_sqlite3 "github.com/golang-migrate/migrate/v4/database/sqlite3"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 /*
@@ -46,6 +48,33 @@ func ConnectToDatabase(dbFilePath string) (db *sqlx.DB, err error, usable bool) 
 	return
 }
 
-func RunMigrations() (err error) {
+func RunMigrations(db *sqlx.DB, migsDir string) (err error) {
+	migsDir = fmt.Sprintf("file://%s", migsDir)
+
+	slog.Info("db-migrations-folder", "using folder", migsDir)
+
+	driver, err := migration_sqlite3.WithInstance(
+		db.DB,
+		&migration_sqlite3.Config{},
+	)
+	if err != nil {
+		slog.Error("db-migrations", "migration-failure", "failed to create db driver")
+		return
+	}
+
+	migration, err := migrate.NewWithDatabaseInstance(migsDir, "sqlite3", driver)
+	if err != nil {
+		slog.Error("db-migrations", "migration-failure-err", err.Error())
+		slog.Error("db-migrations", "migration-failure", "failed connect to database")
+		return
+	}
+
+	err = migration.Up()
+	if err != nil {
+		slog.Error("db-migrations", "migrations-up-failure", err.Error())
+		return
+	}
+
+	slog.Info("db-migrations", "migrations-success", "migrated the DB successfully")
 	return
 }

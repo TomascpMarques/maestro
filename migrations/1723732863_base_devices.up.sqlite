@@ -1,0 +1,22 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS
+    device (
+        pk INTEGER PRIMARY KEY,
+        device_type INTEGER NOT NULL,
+        serial_id TEXT NOT NULL UNIQUE,
+        device_status INTEGER NOT NULL,
+        description TEXT
+    );
+
+CREATE TABLE IF NOT EXISTS
+    device_measurement (
+        pk INTEGER PRIMARY KEY,
+        publishing_device_fk INTEGER NOT NULL,
+        m_value TEXT NOT NULL,
+        m_value_type INTEGER NOT NULL CHECK (m_value_type >= 10),
+        received_at INTEGER NOT NULL,
+        --
+        -- Foreign keys
+        FOREIGN KEY (publishing_device_fk) REFERENCES device (pk) ON DELETE SET NULL
+    );

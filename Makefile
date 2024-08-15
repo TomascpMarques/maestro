@@ -16,3 +16,6 @@ run_env: build
 
 testA:
 	go test -v ./...
+
+migrate:
+	migrate create -ext .sqlite -dir migrations -format unix -tz "UTC" $(MIGN)

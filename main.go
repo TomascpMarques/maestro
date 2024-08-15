@@ -9,22 +9,21 @@ import (
 	"os"
 	"time"
 
-	"github.com/TomascpMarques/maestro/backup"
+	backup "github.com/TomascpMarques/maestro/backup"
 	gin "github.com/gin-gonic/gin"
 	validator "github.com/go-playground/validator/v10"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
 )
+
+/*
+	TODO Add a way to publish the current date-and-time to the raspberry pi, so we can keep track of it with some certainty
+*/
 
 // Struct validation across the entire app
 var VALIDATE *validator.Validate = validator.New(
 	validator.WithRequiredStructEnabled(),
 	validator.WithPrivateFieldValidation(),
 )
-
-/*
-	// TODO: Create Database according to env
-	// TODO: Backup Database and zip it according to env
-*/
 
 func main() {
 	// Env file config loading
@@ -81,15 +80,12 @@ func main() {
 	_ = signalHandler
 	defer ticker.Stop()
 
-	schema := `CREATE TABLE spo (
-	    value integer,
-	    time text
-	    );`
-
 	// execute a query on the server
-	_, err = db.Exec(schema)
+	err = RunMigrations(db, "./migrations/")
 	if err != nil {
-		slog.Error("setup-db", "cause", "Could not build")
+		slog.Error("setup-db-migrations", "cause", err.Error())
+		slog.Error("setup-db-migrations", "cause", "Could not migrate db changes")
+		os.Exit(1)
 	}
 
 	// Web App config and launch
@@ -111,26 +107,16 @@ func main() {
 func HttpApi(api *gin.RouterGroup) {
 	v1 := api.Group("/v1")
 
-	dataSources := v1.Group("/source")
+	devices := v1.Group("/devices")
 
-	pmds := dataSources.Group("/pmd")
+	// /v1/devices/pmd
+	pmd := devices.Group("/pmd")
 
-	pmds.POST("/spo2", func(ctx *gin.Context) {
-		type Spo2Measure struct {
-			Value      int    `form:"value"  binding:"required"`
-			SourceID   string `form:"source" binding:"required"`
-			DeviceType string `form:"device" binding:"required"`
-		}
+	// /v1/devices/pmd/data
+	_ = pmd.Group("/data")
 
-		var spo2Measure Spo2Measure
-		if err := ctx.ShouldBind(&spo2Measure); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{
-				"error": "invalid data",
-			})
-			log.Printf("Erro: %s", err.Error())
-			return
-		}
-
-		ctx.Status(http.StatusAccepted)
-	})
+	// /v1/devices/pmd/status
+	status := pmd.Group("/status")
+	status.POST("/", func(c *gin.Context) {})
+	status.GET("/", func(c *gin.Context) {})
 }
