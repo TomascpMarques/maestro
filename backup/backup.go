@@ -153,7 +153,7 @@ func backupFile(locations BackupLocations) (err error) {
 
 	slog.Info("backup-file", "finished-backup-compression", "Successfully compressed the backup file")
 
-	if os.Remove(destinationBkpFileName) != nil {
+	if os.Remove(destinationFilename) != nil {
 		slog.Warn("backup-file", "failed-deleting-temp-file", "")
 	}
 

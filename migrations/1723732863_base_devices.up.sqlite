@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS
     device_measurement (
         pk INTEGER PRIMARY KEY,
         publishing_device_fk INTEGER NOT NULL,
-        m_value TEXT NOT NULL,
-        m_value_type INTEGER NOT NULL CHECK (m_value_type >= 10),
+        m_value TEXT NOT NULL CHECK (length(m_value) >= 2),
+        m_value_type INTEGER NOT NULL CHECK (m_value_type >= 0),
         received_at INTEGER NOT NULL,
         --
         -- Foreign keys

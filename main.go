@@ -10,6 +10,7 @@ import (
 	"time"
 
 	backup "github.com/TomascpMarques/maestro/backup"
+	web_service "github.com/TomascpMarques/maestro/web_api"
 	gin "github.com/gin-gonic/gin"
 	validator "github.com/go-playground/validator/v10"
 	_ "github.com/mattn/go-sqlite3" // sqlite3 driver
@@ -91,7 +92,7 @@ func main() {
 	// Web App config and launch
 	app := gin.Default()
 	api := app.Group("/api")
-	HttpApi(api)
+	web_service.Api(api, db)
 
 	server := &http.Server{
 		Handler:      app,
@@ -102,21 +103,4 @@ func main() {
 	}
 
 	server.ListenAndServe()
-}
-
-func HttpApi(api *gin.RouterGroup) {
-	v1 := api.Group("/v1")
-
-	devices := v1.Group("/devices")
-
-	// /v1/devices/pmd
-	pmd := devices.Group("/pmd")
-
-	// /v1/devices/pmd/data
-	_ = pmd.Group("/data")
-
-	// /v1/devices/pmd/status
-	status := pmd.Group("/status")
-	status.POST("/", func(c *gin.Context) {})
-	status.GET("/", func(c *gin.Context) {})
 }
